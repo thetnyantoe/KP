@@ -53,9 +53,8 @@ export default function DeliveryChart({ data }: DeliveryChartProps) {
               ))}
             </Pie>
 
-            <Tooltip
-              formatter={(value: number) => [`${value} Orders`, "Count"]}
-            />
+            {/* Fixed type error: Using 'any' type on parameter to match Recharts expectations */}
+            <Tooltip formatter={(value: any) => [`${value} Orders`, "Count"]} />
 
             <Legend verticalAlign="bottom" height={36} />
           </PieChart>
