@@ -18,6 +18,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 
+// Type definition for Sale Items matrix
+type SaleItem = {
+  product_id: string;
+  product_name: string;
+  qty: number;
+  price: number;
+  discount: number;
+  subtotal: number;
+};
+
 export default function AddSale() {
   const today = new Date().toISOString().split("T")[0];
 
@@ -33,7 +43,7 @@ export default function AddSale() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [pickupTime, setPickupTime] = useState("");
 
-  const [items, setItems] = useState([
+  const [items, setItems] = useState<SaleItem[]>([
     {
       product_id: "",
       product_name: "",
@@ -82,7 +92,12 @@ export default function AddSale() {
   // =========================
   // FIELD CHANGE
   // =========================
-  const handleChange = (index: number, field: string, value: any) => {
+  // Fixed type error: strictly typed allowable numeric fields to satisfy index signature checks
+  const handleChange = (
+    index: number,
+    field: "qty" | "price" | "discount",
+    value: string,
+  ) => {
     const updated = [...items];
 
     updated[index][field] = Number(value);
