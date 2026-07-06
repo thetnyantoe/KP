@@ -48,8 +48,14 @@ export default function SalesTypeChart({ data }: SalesTypeChartProps) {
               ))}
             </Pie>
 
+            {/* Fixed type error: Updated param value to any type signature context */}
             <Tooltip
-              formatter={(value: number) => [value.toLocaleString(), "Orders"]}
+              formatter={(value: any) => [
+                value !== undefined && value !== null
+                  ? Number(value).toLocaleString()
+                  : "0",
+                "Orders",
+              ]}
             />
 
             <Legend verticalAlign="bottom" height={36} />
