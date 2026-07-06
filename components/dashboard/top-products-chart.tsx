@@ -52,8 +52,9 @@ export default function TopProductsChart({ data }: TopProductsChartProps) {
               tick={{ fontSize: 11 }}
             />
 
+            {/* Fixed type error: Updated parameter to 'any' to fit Recharts expected Formatter type definitions */}
             <Tooltip
-              formatter={(value: number) => [`${value} sold`, "Quantity"]}
+              formatter={(value: any) => [`${value} sold`, "Quantity"]}
             />
 
             <Bar dataKey="sold" radius={[0, 8, 8, 0]}>
