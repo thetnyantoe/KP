@@ -32,10 +32,11 @@ export default function AddProduct() {
     status: "Active",
   });
 
-  const handleChange = (key: string, value: string) => {
+  // Fixed TypeScript error: Accept string or null from custom selectors, falling back cleanly
+  const handleChange = (key: string, value: string | null) => {
     setForm((prev) => ({
       ...prev,
-      [key]: value,
+      [key]: value ?? "",
     }));
   };
 
@@ -143,9 +144,7 @@ export default function AddProduct() {
 
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
-
                     <SelectItem value="Inactive">Inactive</SelectItem>
-
                     <SelectItem value="Out of Stock">Out of Stock</SelectItem>
                   </SelectContent>
                 </Select>
