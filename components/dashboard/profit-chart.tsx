@@ -38,8 +38,14 @@ export default function ProfitChart({ data }: ProfitChartProps) {
             <XAxis dataKey="period" />
             <YAxis tick={{ fontSize: 10 }} />
 
+            {/* Fixed type error: Updated parameter to 'any' to fit Recharts expected Formatter type definitions */}
             <Tooltip
-              formatter={(value: number) => [value.toLocaleString(), ""]}
+              formatter={(value: any) => [
+                value !== undefined && value !== null
+                  ? Number(value).toLocaleString()
+                  : "0",
+                "",
+              ]}
             />
 
             <Legend />
