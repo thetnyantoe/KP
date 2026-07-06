@@ -52,8 +52,9 @@ export default function InventoryChart({ data }: InventoryChartProps) {
               ))}
             </Pie>
 
+            {/* Fixed type error: Changed type from 'number' to 'any' to conform to Recharts internal definitions */}
             <Tooltip
-              formatter={(value: number) => [`${value} Products`, "Count"]}
+              formatter={(value: any) => [`${value} Products`, "Count"]}
             />
 
             <Legend verticalAlign="bottom" height={36} />
