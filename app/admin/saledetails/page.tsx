@@ -107,7 +107,8 @@ export default function SalesDetails() {
       <h1 className="text-2xl font-bold mb-5">Sales</h1>
 
       {orders.map((order) => {
-        const total = order.items.reduce((sum, item) => {
+        // Fixed type error: explicitly added type annotations to reduce arguments
+        const total = order.items.reduce((sum: number, item: any) => {
           return sum + item.subtotal;
         }, 0);
 
