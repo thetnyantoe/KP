@@ -61,7 +61,6 @@ export default function TopProductsChart({ data }: TopProductsChartProps) {
               {data.map((entry, index) => {
                 const max = Math.max(...data.map((d) => d.sold));
 
-                // opacity from 0.35 to 1
                 const opacity = 0.35 + (entry.sold / max) * 0.65;
 
                 return (

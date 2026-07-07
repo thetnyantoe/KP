@@ -20,15 +20,14 @@ interface InventoryChartProps {
   data: InventoryData[];
 }
 
-const COLORS = [
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--destructive))",
-];
+const INVENTORY_COLORS: Record<string, string> = {
+  "strong stock": "#2ECC71",
+  "medium stock": "#3498DB",
+  "low stock": "#F1C40F",
+  "out of stock": "#E74C3C",
+};
 
 export default function InventoryChart({ data }: InventoryChartProps) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-
   return (
     <Card className="h-full">
       <CardHeader>
@@ -38,21 +37,24 @@ export default function InventoryChart({ data }: InventoryChartProps) {
       <CardContent className="h-[360px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            {/* PIE CHART (NO innerRadius = full pie) */}
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
               outerRadius={120}
-              paddingAngle={4}
-              strokeWidth={2}
+              paddingAngle={0} // Changed from 4 to 0 to remove angular gaps
+              stroke="none" // Removed the outer border entirely
             >
-              {data.map((_, index) => (
-                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-              ))}
+              {data.map((entry, index) => {
+                const normalizedName = entry.name.toLowerCase().trim();
+                const sliceColor =
+                  INVENTORY_COLORS[normalizedName] ||
+                  `hsl(var(--chart-${(index % 5) + 1}))`;
+
+                return <Cell key={`cell-${index}`} fill={sliceColor} />;
+              })}
             </Pie>
 
-            {/* Fixed type error: Changed type from 'number' to 'any' to conform to Recharts internal definitions */}
             <Tooltip
               formatter={(value: any) => [`${value} Products`, "Count"]}
             />

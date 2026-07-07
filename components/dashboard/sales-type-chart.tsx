@@ -20,11 +20,14 @@ interface SalesTypeChartProps {
   data: SalesTypeData[];
 }
 
-const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))"];
+// Fallback colors just in case a name doesn't match perfectly
+const COLOR_MAP: Record<string, string> = {
+  delivery: "#F85A43",
+  "in person": "#3F908A",
+  "in-person": "#3F908A", // handles hyphenated variant
+};
 
 export default function SalesTypeChart({ data }: SalesTypeChartProps) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-
   return (
     <Card className="h-full">
       <CardHeader>
@@ -43,12 +46,17 @@ export default function SalesTypeChart({ data }: SalesTypeChartProps) {
               paddingAngle={4}
               strokeWidth={2}
             >
-              {data.map((_, index) => (
-                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-              ))}
+              {data.map((entry, index) => {
+                // Normalize name string to match our color map keys safely
+                const normalizedName = entry.name.toLowerCase().trim();
+                const sliceColor =
+                  COLOR_MAP[normalizedName] ||
+                  `hsl(var(--chart-${(index % 5) + 1}))`;
+
+                return <Cell key={`cell-${index}`} fill={sliceColor} />;
+              })}
             </Pie>
 
-            {/* Fixed type error: Updated param value to any type signature context */}
             <Tooltip
               formatter={(value: any) => [
                 value !== undefined && value !== null

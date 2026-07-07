@@ -167,10 +167,13 @@ export default function Admin() {
         let strongStock = 0;
         let mediumStock = 0;
         let lowStock = 0;
+        let outOfStock = 0; // Added counter
 
         safeProducts.forEach((p) => {
-          if (p.quantity <= 10) lowStock++;
-          else if (p.quantity <= 30) mediumStock++;
+          const qty = Number(p.quantity || 0);
+          if (qty === 0) outOfStock++;
+          else if (qty <= 10) lowStock++;
+          else if (qty <= 30) mediumStock++;
           else strongStock++;
         });
 
@@ -178,6 +181,7 @@ export default function Admin() {
           { name: "Strong Stock", value: strongStock },
           { name: "Medium Stock", value: mediumStock },
           { name: "Low Stock", value: lowStock },
+          { name: "Out of Stock", value: outOfStock }, // Added data piece
         ]);
 
         // --- 7. Delivery Status Distribution Data ---

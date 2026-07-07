@@ -33,16 +33,10 @@ export default function RevenueChart({ data }: RevenueChartProps) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(var(--primary))"
-                  stopOpacity={0.4}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(var(--primary))"
-                  stopOpacity={0}
-                />
+                {/* Top of the gradient: full your color at 40% opacity */}
+                <stop offset="5%" stopColor="rgba(248, 90, 67, 0.4)" />
+                {/* Bottom of the gradient: fades out to transparent */}
+                <stop offset="95%" stopColor="rgba(248, 90, 67, 0)" />
               </linearGradient>
             </defs>
 
@@ -57,9 +51,9 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             <Area
               type="monotone"
               dataKey="revenue"
-              stroke="hsl(var(--primary))"
+              stroke="rgba(248, 90, 67, 1)"
               fill="url(#revenueGradient)"
-              strokeWidth={3}
+              strokeWidth={1}
             />
           </AreaChart>
         </ResponsiveContainer>
