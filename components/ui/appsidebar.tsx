@@ -80,7 +80,7 @@ const menuGroups = [
     label: "Tools",
     items: [
       {
-        title: "AI Chat",
+        title: "AI Chat (In progress)",
         icon: Bot,
         url: "/admin/aichat",
       },
