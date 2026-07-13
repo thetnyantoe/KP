@@ -16,11 +16,50 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 
-// Initialize standard Supabase client for client-side Auth operations
+// ❌ Replace your old initialization:
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
+// const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// ✅ Paste this perfect cookie-aware setup instead:
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
+    // 🍪 Force tokens into cookies so the Middleware can see them instantly!
+    storage: {
+      getItem: (key) => {
+        if (typeof window === "undefined") return null;
+        const name = `${key}=`;
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const ca = decodedCookie.split(";");
+        for (let i = 0; i < ca.length; i++) {
+          let c = ca[i].trim();
+          if (c.indexOf(name) === 0) return c.substring(name.length, c.length);
+        }
+        return window.localStorage.getItem(key);
+      },
+      setItem: (key, value) => {
+        if (typeof window === "undefined") return;
+        // Set cookie valid for 365 days
+        const d = new Date();
+        d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+        document.cookie = `${key}=${value};expires=${d.toUTCString()};path=/;SameSite=Lax;Secure`;
+        window.localStorage.setItem(key, value);
+      },
+      removeItem: (key) => {
+        if (typeof window === "undefined") return;
+        document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+        window.localStorage.removeItem(key);
+      },
+    },
+  },
+});
 export function LoginForm({
   className,
   ...props
