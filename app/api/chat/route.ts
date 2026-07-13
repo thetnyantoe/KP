@@ -71,16 +71,27 @@ Strict Rules:
                 "The unique product_code of the product, e.g., ELEC-001",
               ),
           }),
-          execute: async ({ productCode }) => {
+
+          execute: async ({ productCode }: { productCode: string }) => {
             const { data, error } = await supabaseAdmin
               .from("products")
               .select("name, quantity, sell_price, status")
               .eq("product_code", productCode.trim())
               .single();
 
-            if (error || !data)
-              return { error: `Product code ${productCode} not found.` };
-            return { data };
+            if (error || !data) {
+              return {
+                success: false,
+                error: `Product code ${productCode} not found.`,
+                data: null,
+              };
+            }
+
+            return {
+              success: true,
+              error: null,
+              data: data,
+            };
           },
         }),
         updateStockLevel: tool({
