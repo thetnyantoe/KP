@@ -21,7 +21,7 @@ function isAllowedMessage(msg: string): boolean {
   return forbiddenKeywords.every((word) => !msg.toLowerCase().includes(word));
 }
 
-// ✅ Standalone Parameter Definitions declared outside the handler lifecycle
+// Standalone Zod Schemas
 const CheckStockSchema = z.object({
   productCode: z
     .string()
@@ -56,7 +56,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Clean, single initialization sequence
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
       system: `You are an internal ERP AI Assistant. Your job is to answer ONLY questions related to inventory management, warehouse levels, stock updates, product records, or sales margins.
@@ -74,10 +73,8 @@ Strict Rules:
         checkStockByCode: tool({
           description:
             "Get the current quantity, price, and status of a product using its unique product code.",
-          parameters: CheckStockSchema,
-          execute: async ({
-            productCode,
-          }: z.infer<typeof CheckStockSchema>): Promise<string> => {
+          inputSchema: CheckStockSchema, // ✅ Swapped from 'parameters'
+          execute: async ({ productCode }) => {
             const { data, error } = await supabaseAdmin
               .from("products")
               .select("name, quantity, sell_price, status")
@@ -94,11 +91,8 @@ Strict Rules:
         updateStockLevel: tool({
           description:
             "Updates or adjusts the physical quantity of a product code in stock.",
-          parameters: UpdateStockSchema,
-          execute: async ({
-            productCode,
-            newQuantity,
-          }: z.infer<typeof UpdateStockSchema>): Promise<string> => {
+          inputSchema: UpdateStockSchema, // ✅ Swapped from 'parameters'
+          execute: async ({ productCode, newQuantity }) => {
             const { data, error } = await supabaseAdmin
               .from("products")
               .update({ quantity: newQuantity })
