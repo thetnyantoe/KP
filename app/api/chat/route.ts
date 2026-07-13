@@ -32,10 +32,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Capture the absolute latest message user string
     const lastUserMessage = messages[messages.length - 1]?.content || "";
 
-    // ⛔ Hard blocking tier 1: Explicit keyword verification
     if (!isAllowedMessage(lastUserMessage)) {
       return new Response(
         '0:"I am the ERP AI Assistant. I can only assist with inventory logs, product code tracking, and warehouse metrics. Please ask an ERP-related question."',
@@ -48,7 +46,7 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: groq("llama-3.3-70b-versatile"),
-      // ⛔ Hard blocking tier 2: Clear system instructions with example boundaries
+
       system: `You are an internal ERP AI Assistant. Your job is to answer ONLY questions related to inventory management, warehouse levels, stock updates, product records, or sales margins.
 
 Strict Rules:
@@ -72,7 +70,7 @@ Strict Rules:
               ),
           }),
 
-          execute: async ({ productCode }: { productCode: string }) => {
+          execute: async ({ productCode }) => {
             const { data, error } = await supabaseAdmin
               .from("products")
               .select("name, quantity, sell_price, status")
@@ -80,18 +78,10 @@ Strict Rules:
               .single();
 
             if (error || !data) {
-              return {
-                success: false,
-                error: `Product code ${productCode} not found.`,
-                data: null,
-              };
+              return `Error: Product code "${productCode}" was not found in the inventory registry.`;
             }
 
-            return {
-              success: true,
-              error: null,
-              data: data,
-            };
+            return `Product Found: ${data.name} currently has ${data.quantity} units in stock priced at ${data.sell_price} MMK (Status: ${data.status}).`;
           },
         }),
         updateStockLevel: tool({
@@ -103,6 +93,7 @@ Strict Rules:
               .number()
               .describe("The absolute new total quantity number"),
           }),
+
           execute: async ({ productCode, newQuantity }) => {
             const { data, error } = await supabaseAdmin
               .from("products")
@@ -111,11 +102,9 @@ Strict Rules:
               .select("name, quantity")
               .single();
 
-            if (error) return { error: error.message };
-            return {
-              success: true,
-              message: `Successfully updated ${data.name} stock to ${data.quantity} units.`,
-            };
+            if (error || !data)
+              return `Error updating stock: ${error?.message || "Product not found"}`;
+            return `Successfully updated ${data.name} stock level to ${data.quantity} units.`;
           },
         }),
       },
