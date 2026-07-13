@@ -58,56 +58,64 @@ Strict Rules:
         role: m.role,
         content: m.content,
       })),
-      tools: {
-        checkStockByCode: tool({
-          description:
-            "Get the current quantity, price, and status of a product using its unique product code.",
-          parameters: z.object({
-            productCode: z
-              .string()
-              .describe(
-                "The unique product_code of the product, e.g., ELEC-001",
-              ),
-          }),
 
-          execute: async ({ productCode }) => {
-            const { data, error } = await supabaseAdmin
-              .from("products")
-              .select("name, quantity, sell_price, status")
-              .eq("product_code", productCode.trim())
-              .single();
+const CheckStockSchema = z.object({
+  productCode: z.string().describe("The unique product_code of the product, e.g., ELEC-001"),
+});
 
-            if (error || !data) {
-              return `Error: Product code "${productCode}" was not found in the inventory registry.`;
-            }
+const UpdateStockSchema = z.object({
+  productCode: z.string(),
+  newQuantity: z.number().describe("The absolute new total quantity number"),
+});
 
-            return `Product Found: ${data.name} currently has ${data.quantity} units in stock priced at ${data.sell_price} MMK (Status: ${data.status}).`;
-          },
-        }),
-        updateStockLevel: tool({
-          description:
-            "Updates or adjusts the physical quantity of a product code in stock.",
-          parameters: z.object({
-            productCode: z.string(),
-            newQuantity: z
-              .number()
-              .describe("The absolute new total quantity number"),
-          }),
+// Inside your streamText configuration:
+const result = streamText({
+  model: groq("llama-3.3-70b-versatile"),
+  system: `You are an internal ERP AI Assistant...`, // Keep your system prompt
+  messages: messages.map((m: any) => ({
+    role: m.role,
+    content: m.content,
+  })),
+  tools: {
+    checkStockByCode: tool({
+      description: "Get the current quantity, price, and status of a product using its unique product code.",
+      parameters: CheckStockSchema,
+      // ✅ Explicitly infer parameter structure straight out of the Zod definition
+      execute: async ({ productCode }: z.infer<typeof CheckStockSchema>): Promise<string> => {
+        const { data, error } = await supabaseAdmin
+          .from("products")
+          .select("name, quantity, sell_price, status")
+          .eq("product_code", productCode.trim())
+          .single();
 
-          execute: async ({ productCode, newQuantity }) => {
-            const { data, error } = await supabaseAdmin
-              .from("products")
-              .update({ quantity: newQuantity })
-              .eq("product_code", productCode.trim())
-              .select("name, quantity")
-              .single();
+        if (error || !data) {
+          return `Error: Product code "${productCode}" was not found in the inventory registry.`;
+        }
 
-            if (error || !data)
-              return `Error updating stock: ${error?.message || "Product not found"}`;
-            return `Successfully updated ${data.name} stock level to ${data.quantity} units.`;
-          },
-        }),
+        return `Product Found: ${data.name} currently has ${data.quantity} units in stock priced at ${data.sell_price} MMK (Status: ${data.status}).`;
       },
+    }),
+    updateStockLevel: tool({
+      description: "Updates or adjusts the physical quantity of a product code in stock.",
+      parameters: UpdateStockSchema,
+      // ✅ Explicitly infer parameter structure straight out of the Zod definition
+      execute: async ({ productCode, newQuantity }: z.infer<typeof UpdateStockSchema>): Promise<string> => {
+        const { data, error } = await supabaseAdmin
+          .from("products")
+          .update({ quantity: newQuantity })
+          .eq("product_code", productCode.trim())
+          .select("name, quantity")
+          .single();
+
+        if (error || !data) {
+          return `Error updating stock: ${error?.message || "Product not found"}`;
+        }
+        
+        return `Successfully updated ${data.name} stock level to ${data.quantity} units.`;
+      },
+    }),
+  },
+});
     });
 
     return result.toTextStreamResponse();
