@@ -44,17 +44,19 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         }
         return window.localStorage.getItem(key);
       },
+      // Replace these items inside the custom storage config block of createClient inside your LoginForm:
       setItem: (key, value) => {
         if (typeof window === "undefined") return;
-        // Set cookie valid for 365 days
         const d = new Date();
         d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+        // 🌐 Explicitly specify path=/ to ensure the root middleware can capture it
         document.cookie = `${key}=${value};expires=${d.toUTCString()};path=/;SameSite=Lax;Secure`;
         window.localStorage.setItem(key, value);
       },
       removeItem: (key) => {
         if (typeof window === "undefined") return;
-        document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+        // 🌐 Match the path scope string accurately during deletions
+        document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Lax;Secure`;
         window.localStorage.removeItem(key);
       },
     },
