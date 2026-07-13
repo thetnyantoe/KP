@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import { supabase } from "@/utils/supabase";
 
 import { Button } from "@/components/ui/button";
@@ -9,27 +8,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "react-toastify";
 
 export default function AddProduct() {
   const [image, setImage] = useState<File | null>(null);
 
   const [form, setForm] = useState({
+    product_code: "", // Initializing product code state
     name: "",
     description: "",
     original_price: "",
     sell_price: "",
     quantity: "",
     warranty: "",
-    status: "Active",
   });
 
   // Fixed TypeScript error: Accept string or null from custom selectors, falling back cleanly
@@ -68,13 +59,13 @@ export default function AddProduct() {
       // 2. INSERT INTO PRODUCTS TABLE
       const { error } = await supabase.from("products").insert({
         image: imageUrl,
+        product_code: form.product_code?.trim() || null, // Saves the product code string safely
         name: form.name,
         description: form.description,
         original_price: Number(form.original_price),
         sell_price: Number(form.sell_price),
         quantity: Number(form.quantity),
         warranty: form.warranty,
-        status: form.status,
       });
 
       if (error) {
@@ -83,19 +74,24 @@ export default function AddProduct() {
       toast.success("Product created successfully.");
 
       setForm({
+        product_code: "",
         name: "",
         description: "",
         original_price: "",
         sell_price: "",
         quantity: "",
         warranty: "",
-        status: "Active",
       });
 
       setImage(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Product creating failed.");
+      // Handles duplicate unique constraint database failures smoothly
+      if (err.code === "23505") {
+        toast.error("Creation failed: Product code must be completely unique.");
+      } else {
+        toast.error("Product creating failed.");
+      }
     }
   };
 
@@ -120,6 +116,17 @@ export default function AddProduct() {
             </div>
 
             <div className="grid grid-cols-2 gap-5">
+              {/* PRODUCT CODE */}
+              <div className="space-y-2">
+                <Label>Product Code</Label>
+
+                <Input
+                  placeholder="e.g. ELEC-001"
+                  value={form.product_code}
+                  onChange={(e) => handleChange("product_code", e.target.value)}
+                />
+              </div>
+
               {/* NAME */}
               <div className="space-y-2">
                 <Label>Name</Label>
@@ -128,26 +135,6 @@ export default function AddProduct() {
                   value={form.name}
                   onChange={(e) => handleChange("name", e.target.value)}
                 />
-              </div>
-
-              {/* STATUS */}
-              <div className="space-y-2">
-                <Label>Status</Label>
-
-                <Select
-                  value={form.status}
-                  onValueChange={(value) => handleChange("status", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Out of Stock">Out of Stock</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* ORIGINAL PRICE */}
@@ -186,7 +173,7 @@ export default function AddProduct() {
               </div>
 
               {/* WARRANTY */}
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2 md:col-span-1">
                 <Label>Warranty</Label>
 
                 <Input

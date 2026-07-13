@@ -21,10 +21,10 @@ interface DeliveryChartProps {
 }
 
 const COLORS = [
-  "hsl(var(--chart-3))", // Not Picked Up
-  "hsl(var(--chart-4))", // Picked Up
-  "hsl(var(--primary))", // Delivered
-  "hsl(var(--chart-2))", // Money Received
+  "#94A3B8", // Not Picked Up - gray
+  "#F59E0B", // Picked Up - amber
+  "#3B82F6", // Delivered - blue
+  "#22C55E", // Complete - green
 ];
 
 export default function DeliveryChart({ data }: DeliveryChartProps) {
@@ -53,10 +53,15 @@ export default function DeliveryChart({ data }: DeliveryChartProps) {
               ))}
             </Pie>
 
-            {/* Fixed type error: Using 'any' type on parameter to match Recharts expectations */}
             <Tooltip formatter={(value: any) => [`${value} Orders`, "Count"]} />
 
-            <Legend verticalAlign="bottom" height={36} />
+            <Legend
+              verticalAlign="bottom"
+              height={36}
+              formatter={(value) =>
+                value.charAt(0).toUpperCase() + value.slice(1)
+              }
+            />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

@@ -27,6 +27,12 @@ interface RecentSalesTableProps {
 }
 
 export default function RecentSalesTable({ data }: RecentSalesTableProps) {
+  // ✅ Create a new sorted array copy descending by timestamp (latest first)
+  const sortedData = [...data].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -47,7 +53,7 @@ export default function RecentSalesTable({ data }: RecentSalesTableProps) {
             </TableHeader>
 
             <TableBody>
-              {data.length === 0 ? (
+              {sortedData.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}
@@ -57,7 +63,7 @@ export default function RecentSalesTable({ data }: RecentSalesTableProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                data.map((sale) => (
+                sortedData.map((sale) => (
                   <TableRow key={sale.id}>
                     {/* Customer */}
                     <TableCell className="font-medium">

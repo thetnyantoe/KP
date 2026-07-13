@@ -82,7 +82,7 @@ const menuGroups = [
       {
         title: "AI Chat",
         icon: Bot,
-        url: "/ai-chat",
+        url: "/admin/aichat",
       },
     ],
   },
@@ -100,7 +100,6 @@ export function AppSidebar() {
           </p>
         </div>
       </SidebarHeader>
-
       <SidebarContent>
         {menuGroups.map((group) => (
           <SidebarGroup key={group.label}>
@@ -127,20 +126,20 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton>
-              <a href="/settings" className="flex items-center gap-2 w-full">
-                <Settings />
-
-                <span>Settings</span>
+              <a
+                href="/settings"
+                className="flex items-center gap-2 w-full text-xs text-black/40 font-thiner"
+              >
+                <span>2026 all rights reserved</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </SidebarFooter>
+      </SidebarFooter>{" "}
     </Sidebar>
   );
 }

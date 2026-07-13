@@ -7,7 +7,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "react-toastify/dist/ReactToastify.css";
 import ToastProvider from "@/components/providers/toast-provider";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,8 +25,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WMS",
-  description: "ERP by sandi",
+  title: "KyiPhyu",
+  description: "KP electronic shop",
 };
 
 export default function RootLayout({

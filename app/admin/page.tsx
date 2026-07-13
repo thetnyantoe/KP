@@ -41,9 +41,7 @@ export default function Admin() {
         // 1. Fetch raw datasets from database
         const { data: sales, error: salesErr } = await supabase
           .from("sales")
-          .select(
-            "*, delivery(id, pickup_time, delivered_time, money_received_time)",
-          );
+          .select("*, delivery(id, status)");
 
         const { data: products, error: prodErr } = await supabase
           .from("products")
@@ -185,26 +183,42 @@ export default function Admin() {
         ]);
 
         // --- 7. Delivery Status Distribution Data ---
-        let notPickedUp = 0;
-        let pickedUp = 0;
-        let delivered = 0;
-        let moneyReceived = 0;
+        const deliveryStatusCount: Record<string, number> = {
+          notpickedup: 0,
+          pickedup: 0,
+          delivered: 0,
+          complete: 0,
+        };
 
         safeSales.forEach((sale) => {
-          const del = sale.delivery as any;
-          if (del && del.id) {
-            if (del.money_received_time) moneyReceived++;
-            else if (del.delivered_time) delivered++;
-            else if (del.pickup_time) pickedUp++;
-            else notPickedUp++;
+          const delivery = sale.delivery as any;
+
+          if (delivery?.id) {
+            const status = delivery.status || "notpickedup";
+
+            if (deliveryStatusCount[status] !== undefined) {
+              deliveryStatusCount[status]++;
+            }
           }
         });
 
         setDeliveryData([
-          { name: "Not Picked Up", value: notPickedUp },
-          { name: "Picked Up", value: pickedUp },
-          { name: "Delivered", value: delivered },
-          { name: "Money Received", value: moneyReceived },
+          {
+            name: "Not Picked Up",
+            value: deliveryStatusCount.notpickedup,
+          },
+          {
+            name: "Picked Up",
+            value: deliveryStatusCount.pickedup,
+          },
+          {
+            name: "Delivered",
+            value: deliveryStatusCount.delivered,
+          },
+          {
+            name: "Complete",
+            value: deliveryStatusCount.complete,
+          },
         ]);
 
         // --- 8. Recent Sales Transformer ---
