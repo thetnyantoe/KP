@@ -28,9 +28,9 @@ import {
 type SaleItem = {
   product_id: string;
   product_name: string;
-  qty: number | string; // 💡 Allows temporary empty string states while typing
-  price: number;
-  discount: number | string; // 💡 Allows temporary empty string states while typing
+  qty: number | string;
+  price: number | string;
+  discount: number | string;
   subtotal: number;
 };
 
@@ -116,9 +116,6 @@ export default function AddSale() {
     setSearchQuery("");
   };
 
-  // =========================
-  // FIELD CHANGE
-  // =========================
   const handleChange = (
     index: number,
     field: "qty" | "price" | "discount",
@@ -131,7 +128,8 @@ export default function AddSale() {
 
     // 💡 Allow the field to be genuinely blank while typing!
     if (value === "") {
-      updated[index][field] = "";
+      // Cast the dynamic assignment to allow writing string to these keys safely
+      (updated[index] as any)[field] = "";
       updated[index].subtotal = 0; // Temporarily make subtotal 0
       setItems(updated);
       return;
@@ -155,7 +153,8 @@ export default function AddSale() {
 
     if (field === "qty" && numericValue < 0) numericValue = 0;
 
-    updated[index][field] = numericValue;
+    // Cast the dynamic assignment to allow writing the number safely
+    (updated[index] as any)[field] = numericValue;
 
     const item = updated[index];
     const itemQty = Number(item.qty) || 0;
