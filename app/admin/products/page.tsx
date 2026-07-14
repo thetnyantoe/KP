@@ -15,7 +15,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "react-toastify";
-import { Package, Wallet } from "lucide-react";
+import {
+  Package,
+  Wallet,
+  Loader2,
+  Upload,
+  AlertTriangle,
+  Trash2,
+  X,
+  Pencil,
+} from "lucide-react";
 
 export default function Products() {
   const router = useRouter();
@@ -25,6 +34,15 @@ export default function Products() {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 📸 State tracking for the new replacement image file
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+
+  // 🛡️ Cool State: Tracks which product is currently showing the inline confirmation overlay
+  const [deletingProductData, setDeletingProductData] = useState<any | null>(
+    null,
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // --- Filter and Sort States ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,26 +73,41 @@ export default function Products() {
     setLoading(false);
   };
 
-  const deleteProduct = async (product: any) => {
+  // 🧹 Helper function to extract and purge a file from storage bucket cleanly
+  const deleteImageFromStorage = async (imageUrl: string) => {
     try {
-      let fileName = null;
-
-      if (product.image) {
-        const url = new URL(product.image);
-        const fullPath = url.pathname;
-        fileName = fullPath.split("/product-images/")[1];
-        fileName = decodeURIComponent(fileName);
-      }
+      if (!imageUrl) return;
+      const url = new URL(imageUrl);
+      const fullPath = url.pathname;
+      let fileName = fullPath.split("/product-images/")[1];
+      fileName = decodeURIComponent(fileName);
 
       if (fileName) {
         await supabase.storage.from("product-images").remove([fileName]);
+      }
+    } catch (err) {
+      console.error(
+        "Failed parsing or deleting old storage file reference:",
+        err,
+      );
+    }
+  };
+
+  // 🚀 Triggered after user clicks "Yes, Purge Everything" inside our inline UI
+  const executeFinalDelete = async () => {
+    if (!deletingProductData) return;
+    setIsDeleting(true);
+
+    try {
+      if (deletingProductData.image) {
+        await deleteImageFromStorage(deletingProductData.image);
       }
 
       // 💥 Step A: Clear out dependent order references to satisfy foreign keys
       const { error: cascadeError } = await supabase
         .from("sale_items")
         .delete()
-        .eq("product_id", product.id); // Checks matching column connection name in your table schema
+        .eq("product_id", deletingProductData.id);
 
       if (cascadeError) {
         console.log("Sale items clearance failed:", cascadeError);
@@ -84,40 +117,70 @@ export default function Products() {
       const { error } = await supabase
         .from("products")
         .delete()
-        .eq("id", product.id);
+        .eq("id", deletingProductData.id);
 
       if (error) {
         console.log("DB delete error:", error);
         toast.error(`DB Error: ${error.message}`);
+        setIsDeleting(false);
         return;
       }
 
-      setProducts((prev) => prev.filter((p) => p.id !== product.id));
-      toast.success("Product and linked items purged successfully.");
+      setProducts((prev) =>
+        prev.filter((p) => p.id !== deletingProductData.id),
+      );
+      toast.success(`"${deletingProductData.name}" completely removed.`);
+      setDeletingProductData(null); // Reset layout overlay state
     } catch (err) {
       console.log("Delete execution failed:", err);
       toast.error("Delete failed");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleUpdateProduct = async (productId: string) => {
+  const handleUpdateProduct = async (product: any) => {
     if (!editForm) return;
     setIsSaving(true);
 
     try {
+      let finalImageUrl = product.image; // Keep current image by default
+
+      if (newImageFile) {
+        const fileName = `${Date.now()}-${newImageFile.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("product-images")
+          .upload(fileName, newImageFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from("product-images")
+          .getPublicUrl(fileName);
+
+        finalImageUrl = data.publicUrl;
+
+        if (product.image) {
+          await deleteImageFromStorage(product.image);
+        }
+      }
+
+      const updatedData = {
+        name: editForm.name,
+        product_code: editForm.product_code?.trim() || null,
+        original_price: Number(editForm.original_price || 0),
+        sell_price: Number(editForm.sell_price || 0),
+        quantity: Number(editForm.quantity || 0),
+        warranty: editForm.warranty,
+        description: editForm.description,
+        status: editForm.status,
+        image: finalImageUrl,
+      };
+
       const { error } = await supabase
         .from("products")
-        .update({
-          name: editForm.name,
-          product_code: editForm.product_code?.trim() || null,
-          original_price: Number(editForm.original_price || 0),
-          sell_price: Number(editForm.sell_price || 0),
-          quantity: Number(editForm.quantity || 0),
-          warranty: editForm.warranty,
-          description: editForm.description,
-          status: editForm.status,
-        })
-        .eq("id", productId);
+        .update(updatedData)
+        .eq("id", product.id);
 
       if (error) {
         console.error("Database update failure:", error);
@@ -131,14 +194,15 @@ export default function Products() {
 
       setProducts((prev) =>
         prev.map((item) =>
-          item.id === productId ? { ...item, ...editForm } : item,
+          item.id === product.id ? { ...item, ...updatedData } : item,
         ),
       );
 
       toast.success("Product updated successfully.");
       setEditingProductId(null);
       setEditForm(null);
-    } catch (err) {
+      setNewImageFile(null);
+    } catch (err: any) {
       console.error("Update error context:", err);
       toast.error("An unexpected error occurred during update.");
     } finally {
@@ -154,11 +218,14 @@ export default function Products() {
   };
 
   const toggleEditRow = (product: any) => {
+    setDeletingProductData(null); // close confirmation if editing
     if (editingProductId === product.id) {
       setEditingProductId(null);
       setEditForm(null);
+      setNewImageFile(null);
     } else {
       setEditingProductId(product.id);
+      setNewImageFile(null);
       setEditForm({
         name: product.name || "",
         product_code: product.product_code || "",
@@ -176,7 +243,7 @@ export default function Products() {
     if (quantity === 0)
       return "bg-slate-200 text-slate-700 border border-slate-200";
     if (quantity <= 10) return "bg-red-200 text-red-700 border border-red-200";
-    if (quantity <= 30)
+    if (quantity <= 20)
       return "bg-yellow-200 text-yellow-700 border border-yellow-200";
     return "bg-green-200 text-green-700 border border-green-200";
   };
@@ -206,8 +273,8 @@ export default function Products() {
         if (quantityFilter === "out") return p.quantity === 0;
         if (quantityFilter === "low") return p.quantity > 0 && p.quantity <= 10;
         if (quantityFilter === "medium")
-          return p.quantity > 10 && p.quantity <= 30;
-        if (quantityFilter === "high") return p.quantity > 30;
+          return p.quantity > 10 && p.quantity <= 20;
+        if (quantityFilter === "high") return p.quantity > 20;
         return true;
       });
     }
@@ -238,7 +305,7 @@ export default function Products() {
 
         if (qty === 0) acc.outOfStock += 1;
         else if (qty <= 10) acc.lowStock += 1;
-        else if (qty <= 30) acc.mediumStock += 1;
+        else if (qty <= 20) acc.mediumStock += 1;
         else acc.highStock += 1;
 
         return acc;
@@ -308,8 +375,8 @@ export default function Products() {
             <option value="all">All Quantities</option>
             <option value="out">Out of Stock (0)</option>
             <option value="low">Low (1 - 10)</option>
-            <option value="medium">Medium (11 - 30)</option>
-            <option value="high">High (&gt; 30)</option>
+            <option value="medium">Medium (11 - 20)</option>
+            <option value="high">High (&gt; 20)</option>
           </select>
         </div>
 
@@ -362,6 +429,7 @@ export default function Products() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[60px]">No.</TableHead>
                 <TableHead>Product Code</TableHead>
                 <TableHead>Image</TableHead>
                 <TableHead>Name</TableHead>
@@ -371,7 +439,7 @@ export default function Products() {
                 <TableHead>Qty</TableHead>
                 <TableHead>Warranty</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -379,244 +447,367 @@ export default function Products() {
               {paginatedProducts.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={11}
                     className="text-center py-8 text-slate-400"
                   >
                     No products found matching the criteria.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedProducts.map((p) => (
-                  <React.Fragment key={p.id}>
-                    <TableRow
-                      className={
-                        editingProductId === p.id ? "bg-slate-50/80" : ""
-                      }
-                    >
-                      <TableCell className="font-semibold text-slate-700 font-mono">
-                        {p.product_code || "N/A"}
-                      </TableCell>
+                paginatedProducts.map((p, index) => {
+                  const rowNumber =
+                    (currentPage - 1) * itemsPerPage + index + 1;
 
-                      <TableCell>
-                        {p.image && (
-                          <img
-                            src={p.image}
-                            alt={p.name}
-                            className="w-10 h-10 rounded object-cover"
-                          />
-                        )}
-                      </TableCell>
+                  return (
+                    <React.Fragment key={p.id}>
+                      <TableRow
+                        className={
+                          editingProductId === p.id ||
+                          deletingProductData?.id === p.id
+                            ? "bg-slate-50/80"
+                            : ""
+                        }
+                      >
+                        <TableCell className="font-semibold text-slate-500 text-sm">
+                          {rowNumber}
+                        </TableCell>
 
-                      <TableCell>{p.name}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {p.description}
-                      </TableCell>
-                      <TableCell>
-                        {Number(p.original_price || 0).toLocaleString()} MMK
-                      </TableCell>
-                      <TableCell className="text-green-600">
-                        {Number(p.sell_price || 0).toLocaleString()} MMK
-                      </TableCell>
+                        <TableCell className="font-semibold text-slate-700 font-mono">
+                          {p.product_code || "N/A"}
+                        </TableCell>
 
-                      <TableCell>
-                        <span
-                          className={`inline-flex min-w-[40px] justify-center rounded-full py-1 text-sm font-semibold ${getQuantityBadge(p.quantity)}`}
-                        >
-                          {p.quantity}
-                        </span>
-                      </TableCell>
+                        <TableCell>
+                          {p.image && (
+                            <img
+                              src={p.image}
+                              alt={p.name}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                          )}
+                        </TableCell>
 
-                      <TableCell>{p.warranty || "N/A"}</TableCell>
-                      <TableCell>
-                        {new Date(p.created_at).toLocaleDateString()}
-                      </TableCell>
+                        <TableCell>{p.name}</TableCell>
 
-                      <TableCell className="text-right">
-                        <button
-                          onClick={() => toggleEditRow(p)}
-                          className="text-blue-500 mr-3 hover:underline"
-                        >
-                          {editingProductId === p.id ? "Cancel" : "Edit"}
-                        </button>
-                        <button
-                          onClick={() => deleteProduct(p)}
-                          className="text-red-500 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Dropdown Edit Form Row */}
-                    {editingProductId === p.id && editForm && (
-                      <TableRow className="bg-slate-50 hover:bg-slate-50 border-t border-b border-blue-100">
-                        <TableCell colSpan={10} className="p-4">
-                          <div className="bg-white p-6 rounded-md border border-slate-200 shadow-sm space-y-4">
-                            <div className="flex items-center justify-between border-b pb-2">
-                              <h3 className="font-semibold text-slate-700 text-sm">
-                                Quick Edit Product:{" "}
-                                <span className="text-blue-600">{p.name}</span>
-                              </h3>
-                              <span className="text-xs text-slate-400 font-mono">
-                                Database ID: {p.id}
-                              </span>
+                        {/* 📝 MULTI-LINE SUPPORTED DESCRIPTION HOVER POPUP */}
+                        <TableCell className="relative max-w-[200px] group cursor-help">
+                          <span className="block truncate">
+                            {p.description || "N/A"}
+                          </span>
+                          {p.description && p.description.length > 25 && (
+                            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 bg-slate-900 text-white text-xs rounded p-3 shadow-xl w-64 whitespace-normal leading-relaxed break-words">
+                              {p.description}
+                              {/* Small arrow graphic pointer */}
+                              <div className="w-2 h-2 bg-slate-900 rotate-45 absolute left-4 -bottom-1" />
                             </div>
+                          )}
+                        </TableCell>
 
-                            {/* Form Grid UI */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Product Code
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.product_code}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "product_code",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g. ELEC-001"
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500 font-mono"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Product Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.name}
-                                  onChange={(e) =>
-                                    handleInputChange("name", e.target.value)
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Original Price (MMK)
-                                </label>
-                                <input
-                                  type="number"
-                                  value={editForm.original_price}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "original_price",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Selling Price (MMK)
-                                </label>
-                                <input
-                                  type="number"
-                                  value={editForm.sell_price}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "sell_price",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Quantity
-                                </label>
-                                <input
-                                  type="number"
-                                  value={editForm.quantity}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "quantity",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Warranty
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.warranty}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "warranty",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1 md:col-span-2 xl:col-span-4">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Description
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.description}
-                                  onChange={(e) =>
-                                    handleInputChange(
-                                      "description",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">
-                                  Status
-                                </label>
-                                <select
-                                  value={editForm.status}
-                                  onChange={(e) =>
-                                    handleInputChange("status", e.target.value)
-                                  }
-                                  className="border rounded p-1.5 text-sm bg-white outline-none focus:border-blue-500"
-                                >
-                                  <option value="Active">Active</option>
-                                  <option value="Inactive">Inactive</option>
-                                </select>
-                              </div>
-                              <div className="flex items-end justify-end gap-2 pt-2 md:pt-0">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isSaving}
-                                  onClick={() => {
-                                    setEditingProductId(null);
-                                    setEditForm(null);
-                                  }}
-                                >
-                                  Close
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  disabled={isSaving}
-                                  onClick={() => handleUpdateProduct(p.id)}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                  {isSaving ? "Saving..." : "Save Changes"}
-                                </Button>
-                              </div>
-                            </div>
+                        <TableCell>
+                          {Number(p.original_price || 0).toLocaleString()} MMK
+                        </TableCell>
+                        <TableCell className="text-green-600">
+                          {Number(p.sell_price || 0).toLocaleString()} MMK
+                        </TableCell>
+
+                        <TableCell>
+                          <span
+                            className={`inline-flex min-w-[40px] justify-center rounded-full py-1 text-sm font-semibold ${getQuantityBadge(p.quantity)}`}
+                          >
+                            {p.quantity}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>{p.warranty || "N/A"}</TableCell>
+                        <TableCell>
+                          {new Date(p.created_at).toLocaleDateString()}
+                        </TableCell>
+
+                        <TableCell className="text-right">
+                          <div className="flex justify-end items-center gap-3">
+                            <button
+                              onClick={() => toggleEditRow(p)}
+                              className="text-blue-500 hover:text-blue-700 cursor-pointer transition-colors"
+                              title={
+                                editingProductId === p.id
+                                  ? "Cancel Edit"
+                                  : "Edit Product"
+                              }
+                            >
+                              {editingProductId === p.id ? (
+                                <X className="w-4.5 h-4.5" />
+                              ) : (
+                                <Pencil className="w-4.5 h-4.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingProductId(null);
+                                setDeletingProductData(p);
+                              }}
+                              className="text-red-500 hover:text-red-700 cursor-pointer transition-colors"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="w-4.5 h-4.5" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </React.Fragment>
-                ))
+
+                      {/* COOL INLINE DELETION CONFIRMATION ROW */}
+                      {deletingProductData?.id === p.id && (
+                        <TableRow className="bg-red-50/40 hover:bg-red-50/40 border-t border-b border-red-200">
+                          <TableCell colSpan={11} className="p-4">
+                            <div className="bg-white p-5 rounded-md border border-red-200 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-red-100 rounded-full text-red-600 hidden sm:block">
+                                  <AlertTriangle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-800">
+                                    Confirm Permanent Deletion
+                                  </h4>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 self-end md:self-auto">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isDeleting}
+                                  onClick={() => setDeletingProductData(null)}
+                                  className="h-8 text-slate-600 border-slate-200"
+                                >
+                                  <X className="w-3.5 h-3.5 mr-1" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  disabled={isDeleting}
+                                  onClick={executeFinalDelete}
+                                  className="h-8 bg-red-600 hover:bg-red-700 text-white shadow-sm font-semibold"
+                                >
+                                  {isDeleting ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                                      Purging...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                      Delete Product
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {/* Dropdown Edit Form Row */}
+                      {editingProductId === p.id && editForm && (
+                        <TableRow className="bg-slate-50 hover:bg-slate-50 border-t border-b border-blue-100">
+                          <TableCell colSpan={11} className="p-4">
+                            <div className="bg-white p-6 rounded-md border border-slate-200 shadow-sm space-y-4">
+                              <div className="flex items-center justify-between border-b pb-2">
+                                <h3 className="font-semibold text-slate-700 text-sm">
+                                  Quick Edit Product:{" "}
+                                  <span className="text-blue-600">
+                                    {p.name}
+                                  </span>
+                                </h3>
+                                <span className="text-xs text-slate-400 font-mono">
+                                  Database ID: {p.id}
+                                </span>
+                              </div>
+
+                              {/* Form Grid UI */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Product Code
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.product_code}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "product_code",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="e.g. ELEC-001"
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500 font-mono"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Product Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) =>
+                                      handleInputChange("name", e.target.value)
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Original Price (MMK)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={editForm.original_price}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "original_price",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Selling Price (MMK)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={editForm.sell_price}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "sell_price",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Quantity
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={editForm.quantity}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "quantity",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Warranty
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.warranty}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "warranty",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+
+                                {/* 📸 IMAGE UPLOAD FIELD */}
+                                <div className="flex flex-col gap-1 md:col-span-1">
+                                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                                    <Upload className="w-3 h-3 text-blue-500" />{" "}
+                                    Replace Image
+                                  </label>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                      setNewImageFile(
+                                        e.target.files?.[0] || null,
+                                      )
+                                    }
+                                    className="border rounded p-1 text-xs bg-white cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                  />
+                                </div>
+
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Status
+                                  </label>
+                                  <select
+                                    value={editForm.status}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "status",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm bg-white outline-none focus:border-blue-500"
+                                  >
+                                    <option value="Active">Active</option>
+                                    <option value="Inactive">Inactive</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex flex-col gap-1 md:col-span-2 xl:col-span-4">
+                                  <label className="text-xs font-medium text-slate-500">
+                                    Description
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.description}
+                                    onChange={(e) =>
+                                      handleInputChange(
+                                        "description",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="border rounded p-1.5 text-sm outline-none focus:border-blue-500"
+                                  />
+                                </div>
+
+                                <div className="flex items-end justify-end gap-2 pt-2 md:pt-0 xl:col-span-2 ml-auto">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isSaving}
+                                    onClick={() => {
+                                      setEditingProductId(null);
+                                      setEditForm(null);
+                                      setNewImageFile(null);
+                                    }}
+                                  >
+                                    Close
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    disabled={isSaving}
+                                    onClick={() => handleUpdateProduct(p)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white min-w-[110px]"
+                                  >
+                                    {isSaving ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      "Save Changes"
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </TableBody>
           </Table>

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  DollarSign,
-  ShoppingCart,
-  Package,
-  AlertTriangle,
-  TrendingUp,
-} from "lucide-react";
+import { DollarSign, ShoppingCart, Package, TrendingUp } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -14,14 +8,14 @@ interface StatsCardsProps {
   revenue: number;
   orders: number;
   products: number;
-  lowStock: number;
+  profit: number; // Replaced lowStock with profit
 }
 
 export default function StatsCards({
   revenue,
+  profit,
   orders,
   products,
-  lowStock,
 }: StatsCardsProps) {
   const cards = [
     {
@@ -32,6 +26,16 @@ export default function StatsCards({
       bg: "bg-emerald-100",
       badge: "+12.5%",
       badgeColor: "text-emerald-600 bg-emerald-50",
+    },
+    {
+      title: "Profit",
+      value: `${profit.toLocaleString()} MMK`,
+      icon: TrendingUp,
+      color: "text-teal-600",
+      bg: "bg-teal-100",
+      badge: profit > 0 ? "Profitable" : "Breakeven",
+      badgeColor:
+        profit > 0 ? "text-teal-600 bg-teal-50" : "text-amber-600 bg-amber-50",
     },
     {
       title: "Orders",
@@ -50,18 +54,6 @@ export default function StatsCards({
       bg: "bg-purple-100",
       badge: "Inventory",
       badgeColor: "text-purple-600 bg-purple-50",
-    },
-    {
-      title: "Low Stock",
-      value: lowStock.toLocaleString(),
-      icon: AlertTriangle,
-      color: "text-orange-600",
-      bg: "bg-orange-100",
-      badge: lowStock > 0 ? "Attention" : "Healthy",
-      badgeColor:
-        lowStock > 0
-          ? "text-orange-600 bg-orange-50"
-          : "text-green-600 bg-green-50",
     },
   ];
 

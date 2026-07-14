@@ -162,7 +162,7 @@ export default function Delivery() {
         <TableHeader>
           <TableRow>
             <TableHead>Customer</TableHead>
-            <TableHead>Delivery Address</TableHead>
+            <TableHead>Delivery Service</TableHead>
             <TableHead>Pickup Time</TableHead>
             <TableHead>Delivered Time</TableHead>
             <TableHead>Complete Time</TableHead>

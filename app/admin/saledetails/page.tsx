@@ -13,11 +13,16 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
+import { AlertTriangle, Loader2, Trash2, X } from "lucide-react";
 
 export default function SalesDetails() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+
+  // 🛡️ Safe tracking states for the custom inline row elimination overlay
+  const [removingSaleId, setRemovingSaleId] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<
@@ -46,12 +51,13 @@ export default function SalesDetails() {
       return;
     }
 
-    // 2. fetch sale_items + products
+    // 2. fetch sale_items + products (including product_code)
     const { data: items } = await supabase.from("sale_items").select(`
         *,
         products (
           name,
-          image
+          image,
+          product_code
         )
       `);
 
@@ -67,6 +73,7 @@ export default function SalesDetails() {
         saleType: sale.sale_type,
         totalAmount: sale.total_amount,
         items: saleItems.map((i) => ({
+          productCode: i.products?.product_code || "-",
           product: i.products?.name || "Unknown",
           image: i.products?.image || null,
           qty: i.quantity,
@@ -81,31 +88,38 @@ export default function SalesDetails() {
     setLoading(false);
   };
 
-  const handleRemoveSale = async (saleId: string) => {
-    const { error: itemError } = await supabase
-      .from("sale_items")
-      .delete()
-      .eq("sale_id", saleId);
+  // 🚀 EXECUTED ONLY AFTER CUSTOMER APPROVES FROM INLINE OVERLAY UI
+  const executeRemoveSale = async (saleId: string) => {
+    setIsRemoving(true); // 🔒 Lock double clicks
 
-    if (itemError) {
-      console.error(itemError);
-      toast.error("Failed to remove sale items.");
-      return;
+    try {
+      const { error: itemError } = await supabase
+        .from("sale_items")
+        .delete()
+        .eq("sale_id", saleId);
+
+      if (itemError) {
+        throw itemError;
+      }
+
+      const { error: saleError } = await supabase
+        .from("sales")
+        .delete()
+        .eq("id", saleId);
+
+      if (saleError) {
+        throw saleError;
+      }
+
+      setOrders((prev) => prev.filter((order) => order.id !== saleId));
+      toast.success("Sale removed successfully.");
+      setRemovingSaleId(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to safely remove sale elements.");
+    } finally {
+      setIsRemoving(false); // 🔓 Unlock interface
     }
-
-    const { error: saleError } = await supabase
-      .from("sales")
-      .delete()
-      .eq("id", saleId);
-
-    if (saleError) {
-      console.error(saleError);
-      toast.error("Failed to remove sale.");
-      return;
-    }
-
-    setOrders((prev) => prev.filter((order) => order.id !== saleId));
-    toast.success("Sale removed successfully.");
   };
 
   const handleGeneratePDF = async (order: any) => {
@@ -236,6 +250,7 @@ export default function SalesDetails() {
             <thead>
               <tr>
                 <th style="border-top-left-radius: 4px; border-bottom-left-radius: 4px; width: 40px;">Img</th>
+                <th style="width: 80px;">Code</th>
                 <th>Product Item</th>
                 <th style="text-align: center; width: 40px;">Qty</th>
                 <th style="text-align: right; width: 90px;">Unit Price</th>
@@ -251,6 +266,7 @@ export default function SalesDetails() {
                   <td>
                     ${item.image ? `<img src="${item.image}" class="prod-img" />` : `<div class="prod-img-placeholder"></div>`}
                   </td>
+                  <td style="font-family: monospace; color: #64748B; font-size: 10px;">${item.productCode}</td>
                   <td style="font-weight: 500; color: #1E293B;">${item.product}</td>
                   <td style="text-align: center; color: #475569;">${item.qty}</td>
                   <td style="text-align: right; color: #475569;">${Number(item.price).toLocaleString()} MMK</td>
@@ -424,7 +440,11 @@ export default function SalesDetails() {
           return (
             <div
               key={order.id}
-              className="border rounded-lg p-4 shadow-sm mb-4 border-[#f7d8c1] bg-white"
+              className={`border rounded-lg p-4 shadow-sm mb-4 transition-colors duration-200 ${
+                removingSaleId === order.id
+                  ? "border-red-300 bg-red-50/10"
+                  : "border-[#f7d8c1] bg-white"
+              }`}
             >
               {/* HEADER */}
               <div className="flex justify-between mb-4 ">
@@ -452,6 +472,7 @@ export default function SalesDetails() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead style={{ width: "90px" }}>Code</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Price</TableHead>
@@ -462,6 +483,9 @@ export default function SalesDetails() {
                 <TableBody>
                   {order.items.map((item: any, index: number) => (
                     <TableRow key={index}>
+                      <TableCell className="font-mono text-xs text-slate-500">
+                        {item.productCode}
+                      </TableCell>
                       <TableCell className="font-medium">
                         {item.product}
                       </TableCell>
@@ -479,7 +503,7 @@ export default function SalesDetails() {
               </Table>
 
               {/* FOOTER */}
-              <div className="flex justify-between items-center mt-4 pt-2 border-t border-slate-50">
+              <div className="flex justify-between items-center mt-4 pt-2 border-t border-slate-100">
                 <div className="font-bold text-slate-800">
                   <span className=" font-normal">Total:</span>{" "}
                   <span className="text-green-600">
@@ -496,13 +520,70 @@ export default function SalesDetails() {
                     {pdfLoadingId === order.id ? "Preparing..." : "PDF Receipt"}
                   </button>
                   <button
-                    onClick={() => handleRemoveSale(order.id)}
+                    onClick={() => setRemovingSaleId(order.id)} // 🎯 Active custom confirm drawer state toggle
                     className="text-red-500 cursor-pointer hover:underline"
                   >
                     Remove
                   </button>
                 </div>
               </div>
+
+              {/* 🔥 COOL INLINE CARD DRAWER OVERLAY */}
+              {removingSaleId === order.id && (
+                <div className="mt-4 p-4 rounded-md border border-red-200 bg-white shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 rounded-full text-red-600 hidden sm:block">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-sm font-bold text-slate-800">
+                        Confirm Sale Delete
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Drop sale{" "}
+                        <span className="font-mono font-bold text-red-600">
+                          #{order.id.slice(0, 8).toUpperCase()}
+                        </span>{" "}
+                        for customer{" "}
+                        <span className="font-semibold">
+                          "{order.customer || "Walk-in"}"
+                        </span>
+                        ?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isRemoving}
+                      onClick={() => setRemovingSaleId(null)}
+                      className="h-8 text-slate-600 border-slate-200"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={isRemoving}
+                      onClick={() => executeRemoveSale(order.id)}
+                      className="h-8 bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm"
+                    >
+                      {isRemoving ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                          Deleting sale...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                          Confirm Delete
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })
@@ -515,7 +596,8 @@ export default function SalesDetails() {
             Showing Page{" "}
             <span className="font-semibold text-slate-700">{currentPage}</span>{" "}
             of{" "}
-            <span className="font-semibold text-slate-700">{totalPages}</span> (
+            <span className="font-semibold text-slate-700">{totalPages}</span>{" "}
+            (\
             {filteredOrders.length} total entries)
           </p>
           <div className="flex items-center gap-2">

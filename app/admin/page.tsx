@@ -24,7 +24,7 @@ export default function Admin() {
     revenue: 0,
     orders: 0,
     products: 0,
-    lowStock: 0,
+    profit: 0, // State key changed from lowStock to profit
   });
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [salesTypeData, setSalesTypeData] = useState<any[]>([]);
@@ -69,15 +69,24 @@ export default function Admin() {
           .filter((s) => s.status !== "Cancelled")
           .reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
 
-        const lowStockCount = safeProducts.filter(
-          (p) => p.quantity > 0 && p.quantity <= 10,
-        ).length;
+        // Sum the cumulative original wholesale prices for all items sold
+        const totalCostOfGoodsSold = safeSaleItems.reduce((sum, item) => {
+          const qty = item.quantity || 1;
+          const origPrice = Number((item.products as any)?.original_price || 0);
+          return sum + origPrice * qty;
+        }, 0);
+
+        // Safeguard to prevent negative profit values during heavy investment/early periods
+        const calculatedProfit = Math.max(
+          0,
+          totalRevenue - totalCostOfGoodsSold,
+        );
 
         setStats({
           revenue: totalRevenue,
           orders: safeSales.length,
           products: safeProducts.length,
-          lowStock: lowStockCount,
+          profit: calculatedProfit,
         });
 
         // --- 3. Dynamic Period Aggregations (Revenue and Profit Trends) ---
@@ -165,13 +174,13 @@ export default function Admin() {
         let strongStock = 0;
         let mediumStock = 0;
         let lowStock = 0;
-        let outOfStock = 0; // Added counter
+        let outOfStock = 0;
 
         safeProducts.forEach((p) => {
           const qty = Number(p.quantity || 0);
           if (qty === 0) outOfStock++;
           else if (qty <= 10) lowStock++;
-          else if (qty <= 30) mediumStock++;
+          else if (qty <= 20) mediumStock++;
           else strongStock++;
         });
 
@@ -179,7 +188,7 @@ export default function Admin() {
           { name: "Strong Stock", value: strongStock },
           { name: "Medium Stock", value: mediumStock },
           { name: "Low Stock", value: lowStock },
-          { name: "Out of Stock", value: outOfStock }, // Added data piece
+          { name: "Out of Stock", value: outOfStock },
         ]);
 
         // --- 7. Delivery Status Distribution Data ---
@@ -266,7 +275,7 @@ export default function Admin() {
         revenue={stats.revenue}
         orders={stats.orders}
         products={stats.products}
-        lowStock={stats.lowStock}
+        profit={stats.profit}
       />
 
       {/* Revenue + Sales Type */}

@@ -15,7 +15,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "react-toastify";
-import { DollarSign, ShoppingCart } from "lucide-react";
+import {
+  DollarSign,
+  ShoppingCart,
+  AlertTriangle,
+  Loader2,
+  Trash2,
+  X,
+  Eye,
+  FileDown,
+} from "lucide-react";
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -38,6 +47,7 @@ type Sale = {
 };
 
 type SaleItemDetail = {
+  product_code: string; // Added code property
   product_name: string;
   image_url?: string;
   quantity: number;
@@ -50,6 +60,10 @@ export default function Sales() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+
+  // 🛡️ Safe tracking states for the custom inline row elimination overlay
+  const [removingSaleId, setRemovingSaleId] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   // --- Modal State Engine ---
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -100,15 +114,19 @@ export default function Sales() {
     setSelectedSaleItems([]);
 
     try {
+      // Included product_code in query select
       const { data, error } = await supabase
         .from("sale_items")
-        .select("quantity, price, discount, subtotal, products(name, image)")
+        .select(
+          "quantity, price, discount, subtotal, products(name, image, product_code)",
+        )
         .eq("sale_id", sale.id);
 
       if (error) throw error;
 
       const formattedItems: SaleItemDetail[] = (data || []).map(
         (item: any) => ({
+          product_code: item.products?.product_code || "-",
           product_name: item.products?.name || "Unknown Product",
           image_url: item.products?.image || undefined,
           quantity: item.quantity,
@@ -207,52 +225,38 @@ export default function Sales() {
     }
   }, [paginatedSales, currentPage]);
 
-  const handleRemoveSale = async (id: string) => {
-    const { error: itemError } = await supabase
-      .from("sale_items")
-      .delete()
-      .eq("sale_id", id);
+  // 🚀 EXECUTED ONLY AFTER CUSTOMER APPRIVES FROM INLINE OVERLAY UI
+  const executeRemoveSale = async (id: string) => {
+    setIsRemoving(true);
 
-    if (itemError) {
-      console.error(itemError);
-      toast.error("Failed to clear sale items.");
-      return;
+    try {
+      const { error: itemError } = await supabase
+        .from("sale_items")
+        .delete()
+        .eq("sale_id", id);
+
+      if (itemError) {
+        throw itemError;
+      }
+
+      const { error } = await supabase.from("sales").delete().eq("id", id);
+
+      if (error) {
+        throw error;
+      }
+
+      setSales((prev) => prev.filter((sale) => sale.id !== id));
+      if (selectedSale?.id === id) {
+        handleCloseDetails();
+      }
+      toast.success("Transaction row removed successfully.");
+      setRemovingSaleId(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to safely purge sale items.");
+    } finally {
+      setIsRemoving(false);
     }
-
-    const { error } = await supabase.from("sales").delete().eq("id", id);
-
-    if (error) {
-      console.error(error);
-      toast.error("Failed to remove sale.");
-      return;
-    }
-
-    setSales((prev) => prev.filter((sale) => sale.id !== id));
-    if (selectedSale?.id === id) {
-      handleCloseDetails();
-    }
-    toast.success("Sale removed successfully.");
-  };
-
-  const loadImageToBase64 = (url: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "Anonymous";
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL("image/jpeg"));
-        } else {
-          reject(new Error("Failed to compile image context context"));
-        }
-      };
-      img.onerror = (err) => reject(err);
-      img.src = url;
-    });
   };
 
   const handleGeneratePDF = async (sale: Sale) => {
@@ -261,16 +265,16 @@ export default function Sales() {
       const shopMeta = {
         name: "ကြည်ဖြူ Electric Market",
         address:
-          "အင်းစိန်မြို့န​ယ် ၊​ ပြည်လမ်း ဆယ်မိုင်ကုန်း မှတ်တိုင်အနီး (ကြည်ဖြူ ကုန်ပဒေသာဆိုင်)",
+          "အင်းစိန်မြို့န​ယ် ၊​ ပြည်လမ်း ဆယ်မိုင်ကုန်း မှတ်တိုင်အနီး (ကြည်ဖြူ ကုန်ပေဒသာဆိုင်)",
         phone: "09420580865 / 09455166228 / 09420580866",
         qrUrl: "/qr.png",
       };
 
-      // 1. Fetch exact transactional items & join product meta
+      // Included product_code in query select for layout parsing
       const { data: items, error: itemsError } = await supabase
         .from("sale_items")
         .select(
-          "quantity, price, discount, subtotal, product_id, products(name, image)",
+          "quantity, price, discount, subtotal, product_id, products(name, image, product_code)",
         )
         .eq("sale_id", sale.id);
 
@@ -403,6 +407,7 @@ export default function Sales() {
             <thead>
               <tr>
                 <th style="border-top-left-radius: 4px; border-bottom-left-radius: 4px; width: 40px;">Img</th>
+                <th style="width: 80px;">Code</th>
                 <th>Product Item</th>
                 <th style="text-align: center; width: 40px;">Qty</th>
                 <th style="text-align: right; width: 90px;">Unit Price</th>
@@ -418,6 +423,7 @@ export default function Sales() {
                   <td>
                     ${item.products?.image ? `<img src="${item.products.image}" class="prod-img" />` : `<div class="prod-img-placeholder"></div>`}
                   </td>
+                  <td style="font-family: monospace; color: #64748B; font-size: 10px;">${item.products?.product_code || "-"}</td>
                   <td style="font-weight: 500; color: #1E293B;">${item.products?.name || "Unreferenced Item"}</td>
                   <td style="text-align: center; color: #475569;">${item.quantity}</td>
                   <td style="text-align: right; color: #475569;">${Number(item.price).toLocaleString()} MMK</td>
@@ -585,12 +591,13 @@ export default function Sales() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[60px]">No.</TableHead>
               <TableHead>Sale ID</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Sale Type</TableHead>
               <TableHead>Total Amount</TableHead>
               <TableHead>Sale Date</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right w-[150px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -598,71 +605,159 @@ export default function Sales() {
             {paginatedSales.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center py-8 text-slate-400"
                 >
                   No sales records found matching the criteria.
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedSales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="font-medium">
-                    {sale.id.slice(0, 8)}
-                  </TableCell>
+              paginatedSales.map((sale, index) => {
+                const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
 
-                  <TableCell>{sale.customer_name}</TableCell>
+                return (
+                  <React.Fragment key={sale.id}>
+                    <TableRow
+                      className={
+                        removingSaleId === sale.id ? "bg-red-50/20" : ""
+                      }
+                    >
+                      <TableCell className="font-semibold text-slate-500 text-sm">
+                        {rowNumber}
+                      </TableCell>
 
-                  <TableCell>
-                    {sale.sale_type === "DELIVERY" ? (
-                      <span className="text-orange-500 font-semibold">
-                        DELIVERY
-                      </span>
-                    ) : (
-                      <span className="text-green-600 font-semibold">
-                        IN PERSON
-                      </span>
+                      <TableCell className="font-medium font-mono text-xs">
+                        #{sale.id.slice(0, 8).toUpperCase()}
+                      </TableCell>
+
+                      <TableCell>{sale.customer_name}</TableCell>
+
+                      <TableCell>
+                        {sale.sale_type === "DELIVERY" ? (
+                          <span className="text-orange-500 font-semibold text-xs">
+                            DELIVERY
+                          </span>
+                        ) : (
+                          <span className="text-green-600 font-semibold text-xs">
+                            IN PERSON
+                          </span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="font-semibold">
+                        {Number(sale.total_amount).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}{" "}
+                        MMK
+                      </TableCell>
+
+                      <TableCell>
+                        {new Date(sale.sale_date).toLocaleDateString()}
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <div className="flex justify-end items-center gap-4">
+                          <button
+                            onClick={() => {
+                              setRemovingSaleId(null);
+                              handleOpenDetails(sale);
+                            }}
+                            className="text-blue-500 hover:text-blue-700 cursor-pointer transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4.5 h-4.5" />
+                          </button>
+
+                          <button
+                            disabled={pdfLoadingId !== null}
+                            onClick={() => handleGeneratePDF(sale)}
+                            className="text-emerald-500 hover:text-emerald-700 cursor-pointer transition-colors disabled:text-slate-300 disabled:cursor-not-allowed"
+                            title={
+                              pdfLoadingId === sale.id
+                                ? "Preparing PDF..."
+                                : "Download PDF Receipt"
+                            }
+                          >
+                            {pdfLoadingId === sale.id ? (
+                              <Loader2 className="w-4.5 h-4.5 animate-spin text-slate-400" />
+                            ) : (
+                              <FileDown className="w-4.5 h-4.5" />
+                            )}
+                          </button>
+
+                          <button
+                            onClick={() => setRemovingSaleId(sale.id)}
+                            className="text-red-500 hover:text-red-700 cursor-pointer transition-colors"
+                            title="Remove Sale Record"
+                          >
+                            <Trash2 className="w-4.5 h-4.5" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+
+                    {removingSaleId === sale.id && (
+                      <TableRow className="bg-red-50/40 border-t border-b border-red-200 hover:bg-red-50/40">
+                        <TableCell colSpan={7} className="p-4">
+                          <div className="bg-white p-4 rounded-md border border-red-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-red-100 rounded-full text-red-600 hidden sm:block">
+                                <AlertTriangle className="w-4 h-4" />
+                              </div>
+                              <div className="text-left">
+                                <h4 className="text-sm font-bold text-slate-800">
+                                  Confirm Sale Deletion
+                                </h4>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  Delete invoice{" "}
+                                  <span className="font-mono font-bold text-red-600">
+                                    #{sale.id.slice(0, 8).toUpperCase()}
+                                  </span>{" "}
+                                  for customer{" "}
+                                  <span className="font-semibold">
+                                    "{sale.customer_name || "Walk-in"}"
+                                  </span>
+                                  ?
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isRemoving}
+                                onClick={() => setRemovingSaleId(null)}
+                                className="h-8 text-slate-600 border-slate-200"
+                              >
+                                <X className="w-3.5 h-3.5 mr-1" />
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                disabled={isRemoving}
+                                onClick={() => executeRemoveSale(sale.id)}
+                                className="h-8 bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm"
+                              >
+                                {isRemoving ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                                    Dropping...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                    Remove Sale
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </TableCell>
-
-                  <TableCell className="font-semibold">
-                    {Number(sale.total_amount).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                    })}{" "}
-                    MMK
-                  </TableCell>
-
-                  <TableCell>
-                    {new Date(sale.sale_date).toLocaleDateString()}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <button
-                      onClick={() => handleOpenDetails(sale)}
-                      className="text-blue-500 mr-3 cursor-pointer hover:underline"
-                    >
-                      Details
-                    </button>
-
-                    <button
-                      disabled={pdfLoadingId !== null}
-                      onClick={() => handleGeneratePDF(sale)}
-                      className="text-blue-500 mr-3 cursor-pointer hover:underline disabled:text-slate-300"
-                    >
-                      {pdfLoadingId === sale.id
-                        ? "Preparing..."
-                        : "PDF Receipt"}
-                    </button>
-
-                    <button
-                      onClick={() => handleRemoveSale(sale.id)}
-                      className="text-red-500 cursor-pointer hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))
+                  </React.Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -782,6 +877,7 @@ export default function Sales() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead style={{ width: "90px" }}>Code</TableHead>
                       <TableHead>Product</TableHead>
                       <TableHead>Qty</TableHead>
                       <TableHead>Unit Price</TableHead>
@@ -792,6 +888,9 @@ export default function Sales() {
                   <TableBody>
                     {selectedSaleItems.map((item, index) => (
                       <TableRow key={index}>
+                        <TableCell className="font-mono text-xs text-slate-500">
+                          {item.product_code}
+                        </TableCell>
                         <TableCell className="font-medium text-slate-700">
                           {item.product_name}
                         </TableCell>
