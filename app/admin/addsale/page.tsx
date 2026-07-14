@@ -130,7 +130,7 @@ export default function AddSale() {
     );
 
     if (value === "") {
-      updated[index][field] = "";
+      updated[index][field] = 0;
       updated[index].subtotal = 0;
       setItems(updated);
       return;
