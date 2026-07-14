@@ -28,9 +28,9 @@ import {
 type SaleItem = {
   product_id: string;
   product_name: string;
-  qty: number | string;
+  qty: number | string; // 💡 Allows temporary empty string states while typing
   price: number;
-  discount: number | string;
+  discount: number | string; // 💡 Allows temporary empty string states while typing
   subtotal: number;
 };
 
@@ -129,9 +129,10 @@ export default function AddSale() {
       (p) => p.id === updated[index].product_id,
     );
 
+    // 💡 Allow the field to be genuinely blank while typing!
     if (value === "") {
-      updated[index][field] = 0;
-      updated[index].subtotal = 0;
+      updated[index][field] = "";
+      updated[index].subtotal = 0; // Temporarily make subtotal 0
       setItems(updated);
       return;
     }
@@ -231,7 +232,7 @@ export default function AddSale() {
       for (const item of items) {
         if (!item.product_id) continue;
 
-        const finalQty = Number(item.qty);
+        const finalQty = Number(item.qty) || 0;
 
         await supabase.from("sale_items").insert([
           {
