@@ -107,9 +107,12 @@ export default function AddSale() {
     updated[index].qty = initialQty;
     updated[index].discount = 0;
 
+    // 💡 Convert both discount and price safely to numbers for the math calculation
     const numericDiscount = Number(updated[index].discount) || 0;
+    const numericPrice = Number(updated[index].price) || 0;
+
     updated[index].subtotal =
-      initialQty * updated[index].price * (1 - numericDiscount / 100);
+      initialQty * numericPrice * (1 - numericDiscount / 100);
 
     setItems(updated);
     setActiveDropdownIndex(null);
